@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/f-gillmann/wordle-ssh/internal/wordle"
 )
 
 const (
@@ -44,6 +45,7 @@ type GameModel struct {
 	state        GameState
 	errorMessage string
 	letterMap    map[rune]LetterState
+	invalidWord  bool
 }
 
 func NewGameModel(targetWord string) GameModel {
@@ -81,12 +83,20 @@ func (m GameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			if len([]rune(m.currentGuess)) != WordLength {
-				m.errorMessage = fmt.Sprintf("Word must be %d letters", WordLength)
+				m.errorMessage = fmt.Sprintf("Word must be %d letters\n", WordLength)
+				return m, nil
+			}
+
+			// Validate the guess against the wordlist
+			if !wordle.IsValidWord(strings.ToLower(m.currentGuess)) {
+				m.invalidWord = true
+				m.errorMessage = "Invalid word\n"
 				return m, nil
 			}
 
 			// Process the guess
 			m.errorMessage = ""
+			m.invalidWord = false
 			m.guesses = append(m.guesses, m.currentGuess)
 			result := m.evaluateGuess(m.currentGuess)
 			m.guessResults = append(m.guessResults, result)
@@ -119,6 +129,7 @@ func (m GameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.currentGuess) > 0 {
 				m.currentGuess = m.currentGuess[:len(m.currentGuess)-1]
 				m.errorMessage = ""
+				m.invalidWord = false
 			}
 
 		default:
@@ -223,7 +234,12 @@ func (m GameModel) View() string {
 			// Render current guess being typed
 			for j := 0; j < WordLength; j++ {
 				if j < len([]rune(m.currentGuess)) {
-					tiles = append(tiles, TileStyleEmpty.Render(string([]rune(m.currentGuess)[j])))
+					// Use red style if word is invalid
+					style := TileStyleEmpty
+					if m.invalidWord {
+						style = TileStyleInvalid
+					}
+					tiles = append(tiles, style.Render(string([]rune(m.currentGuess)[j])))
 				} else {
 					tiles = append(tiles, TileStyleEmpty.Render(" "))
 				}

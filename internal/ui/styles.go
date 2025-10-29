@@ -49,6 +49,15 @@ var (
 			Width(1).
 			Align(lipgloss.Center)
 
+	TileStyleInvalid = lipgloss.NewStyle().
+				Foreground(colorWhite).
+				Padding(0, 1).
+				Bold(true).
+				Border(lipgloss.NormalBorder()).
+				BorderForeground(colorRed).
+				Width(1).
+				Align(lipgloss.Center)
+
 	MenuTitleStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(colorLightGray).
