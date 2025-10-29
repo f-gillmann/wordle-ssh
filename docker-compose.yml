@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  wordle-ssh:
+    build: .
+    container_name: wordle-ssh-server
+    ports:
+      - "23234:23234"
+    environment:
+      - WORDLE_SSH_HOST=0.0.0.0
+      - WORDLE_SSH_PORT=23234
+      - WORDLE_SSH_HOST_KEY_PATH=.ssh/id_ed25519
+    volumes:
+      - ssh-keys:/root/.ssh
+    restart: unless-stopped
+
+volumes:
+  ssh-keys:
