@@ -1,7 +1,11 @@
 # --- Build ---
-FROM golang:1.23-alpine AS builder
+FROM golang:1.25-bookworm AS builder
 
-RUN apk --no-cache add gcc musl-dev sqlite-dev
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libc6-dev \
+    libsqlite3-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -10,12 +14,15 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=1 GOOS=linux go build -a -ldflags '-linkmode external -extldflags "-static"' -o wordle-ssh ./cmd/main.go
+RUN CGO_ENABLED=1 GOOS=linux go build -a -o wordle-ssh ./cmd/main.go
 
 # --- Run ---
-FROM alpine:latest
+FROM debian:bookworm-slim
 
-RUN apk --no-cache add ca-certificates sqlite-libs
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    libsqlite3-0 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /root/
 
@@ -26,6 +33,7 @@ RUN mkdir -p .ssh /data
 
 EXPOSE 23234
 
+ENV TERM=xterm-256color
 ENV WORDLE_SSH_HOST=0.0.0.0
 ENV WORDLE_SSH_PORT=23234
 ENV WORDLE_SSH_HOST_KEY_PATH=.ssh/id_ed25519

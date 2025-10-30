@@ -1,9 +1,10 @@
-version: '3.8'
-
 services:
   wordle-ssh:
-    build: .
-    container_name: wordle-ssh-server
+    tty: true
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wordle-ssh
     ports:
       - "23234:23234"
     environment:

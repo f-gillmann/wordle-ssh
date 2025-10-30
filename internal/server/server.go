@@ -12,11 +12,13 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/wish"
+	"github.com/charmbracelet/wish/activeterm"
 	"github.com/charmbracelet/wish/bubbletea"
 	"github.com/charmbracelet/wish/logging"
 	"github.com/f-gillmann/wordle-ssh/internal/stats"
 	"github.com/f-gillmann/wordle-ssh/internal/ui"
 	"github.com/f-gillmann/wordle-ssh/internal/wordle"
+	"github.com/muesli/termenv"
 )
 
 const (
@@ -135,7 +137,8 @@ func New(config Config) (*Server, error) {
 		wish.WithAddress(fmt.Sprintf("%s:%s", config.Host, config.Port)),
 		wish.WithHostKeyPath(config.HostKeyPath),
 		wish.WithMiddleware(
-			bubbletea.Middleware(s.teaHandler),
+			bubbletea.MiddlewareWithColorProfile(s.teaHandler, termenv.ANSI256),
+			activeterm.Middleware(),
 			logging.Middleware(),
 		),
 	)
@@ -198,7 +201,10 @@ func (s *Server) teaHandler(sshSession ssh.Session) (tea.Model, []tea.ProgramOpt
 	// Create the app model with the current word, stats store, and logger
 	m := ui.NewAppModel(s.wordleWord, s.wordleDate, username, s.statsStore, hasPlayed, isBlacklisted, s.config.Logger)
 
-	return m, []tea.ProgramOption{tea.WithAltScreen()}
+	opts := []tea.ProgramOption{tea.WithAltScreen()}
+	opts = append(opts, bubbletea.MakeOptions(sshSession)...)
+
+	return m, opts
 }
 
 // Start starts the SSH server
