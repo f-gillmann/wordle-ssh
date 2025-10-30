@@ -239,6 +239,7 @@ func (m GameModel) View() string {
 					if m.invalidWord {
 						style = TileStyleInvalid
 					}
+					
 					tiles = append(tiles, style.Render(string([]rune(m.currentGuess)[j])))
 				} else {
 					tiles = append(tiles, TileStyleEmpty.Render(" "))

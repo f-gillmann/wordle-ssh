@@ -69,6 +69,7 @@ func (m MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.state = MenuStateExit
 				return m, tea.Quit
 			}
+			
 			return m, nil
 		}
 	}

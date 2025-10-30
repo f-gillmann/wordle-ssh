@@ -30,6 +30,7 @@ type Config struct {
 	Port        string
 	HostKeyPath string
 	Logger      *log.Logger
+	LogLevel    log.Level
 }
 
 // LoadConfigFromEnv loads configuration from environment variables
@@ -49,10 +50,27 @@ func LoadConfigFromEnv() Config {
 		hostKeyPath = defaultHostKeyPath
 	}
 
+	logLevel := os.Getenv("WORDLE_SSH_LOG_LEVEL")
+	var level log.Level
+
+	switch logLevel {
+	case "debug":
+		level = log.DebugLevel
+	case "info":
+		level = log.InfoLevel
+	case "warn":
+		level = log.WarnLevel
+	case "error":
+		level = log.ErrorLevel
+	default:
+		level = log.InfoLevel
+	}
+
 	return Config{
 		Host:        host,
 		Port:        port,
 		HostKeyPath: hostKeyPath,
+		LogLevel:    level,
 	}
 }
 
@@ -81,8 +99,10 @@ func New(config Config) (*Server, error) {
 	if config.Logger == nil {
 		config.Logger = log.NewWithOptions(os.Stderr, log.Options{
 			ReportTimestamp: true,
-			TimeFormat:      time.Kitchen,
-			Prefix:          "Wordle SSH",
+			ReportCaller:    config.LogLevel == log.DebugLevel,
+			TimeFormat:      "2006/01/02 15:04:05",
+			Prefix:          "[wordle-ssh]",
+			Level:           config.LogLevel,
 		})
 	}
 
