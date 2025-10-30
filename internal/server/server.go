@@ -139,7 +139,7 @@ func New(config Config) (*Server, error) {
 		wish.WithMiddleware(
 			bubbletea.MiddlewareWithColorProfile(s.teaHandler, termenv.ANSI256),
 			activeterm.Middleware(),
-			logging.Middleware(),
+			logging.StructuredMiddlewareWithLogger(config.Logger, config.LogLevel),
 		),
 	)
 	if err != nil {

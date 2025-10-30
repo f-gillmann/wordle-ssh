@@ -1,6 +1,6 @@
 # wordle-ssh
 
-A simple Wordle game that you can play over SSH.
+A simple Wordle-like game that you can play over SSH.
 
 ## Building
 
