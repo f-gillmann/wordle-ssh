@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/wish"
 	"github.com/charmbracelet/wish/bubbletea"
 	"github.com/charmbracelet/wish/logging"
+	"github.com/f-gillmann/wordle-ssh/internal/stats"
 	"github.com/f-gillmann/wordle-ssh/internal/ui"
 	"github.com/f-gillmann/wordle-ssh/internal/wordle"
 )
@@ -22,6 +23,7 @@ const (
 	defaultHost        = "0.0.0.0"
 	defaultPort        = "23234"
 	defaultHostKeyPath = ".ssh/id_ed25519"
+	defaultDBPath      = "./wordle-stats.db"
 )
 
 // Config holds the server configuration
@@ -29,6 +31,7 @@ type Config struct {
 	Host        string
 	Port        string
 	HostKeyPath string
+	DBPath      string
 	Logger      *log.Logger
 	LogLevel    log.Level
 }
@@ -48,6 +51,11 @@ func LoadConfigFromEnv() Config {
 	hostKeyPath := os.Getenv("WORDLE_SSH_HOST_KEY_PATH")
 	if hostKeyPath == "" {
 		hostKeyPath = defaultHostKeyPath
+	}
+
+	dbPath := os.Getenv("WORDLE_SSH_DB_PATH")
+	if dbPath == "" {
+		dbPath = defaultDBPath
 	}
 
 	logLevel := os.Getenv("WORDLE_SSH_LOG_LEVEL")
@@ -70,6 +78,7 @@ func LoadConfigFromEnv() Config {
 		Host:        host,
 		Port:        port,
 		HostKeyPath: hostKeyPath,
+		DBPath:      dbPath,
 		LogLevel:    level,
 	}
 }
@@ -80,6 +89,7 @@ type Server struct {
 	wordleWord string
 	wordleDate string
 	wishServer *ssh.Server
+	statsStore *stats.Store
 }
 
 // New creates a new SSH server
@@ -96,19 +106,24 @@ func New(config Config) (*Server, error) {
 		config.HostKeyPath = defaultHostKeyPath
 	}
 
+	if config.DBPath == "" {
+		config.DBPath = defaultDBPath
+	}
+
 	if config.Logger == nil {
-		config.Logger = log.NewWithOptions(os.Stderr, log.Options{
-			ReportTimestamp: true,
-			ReportCaller:    config.LogLevel == log.DebugLevel,
-			TimeFormat:      "2006/01/02 15:04:05",
-			Prefix:          "[wordle-ssh]",
-			Level:           config.LogLevel,
-		})
+		return nil, fmt.Errorf("logger must be provided in config")
 	}
 
 	s := &Server{
 		config: config,
 	}
+
+	// Initialize stats store
+	statsStore, err := stats.NewStore(config.DBPath, config.Logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize stats store: %w", err)
+	}
+	s.statsStore = statsStore
 
 	// Fetch today's Wordle word
 	if err := s.refreshWordleWord(); err != nil {
@@ -153,15 +168,35 @@ func (s *Server) refreshWordleWord() error {
 }
 
 // teaHandler creates a bubbletea program for each SSH session
-func (s *Server) teaHandler(ssh.Session) (tea.Model, []tea.ProgramOption) {
+func (s *Server) teaHandler(sshSession ssh.Session) (tea.Model, []tea.ProgramOption) {
 	// Refresh Wordle word if it's a new day
 	if err := s.refreshWordleWord(); err != nil {
 		s.config.Logger.Error("Failed to refresh Wordle word", "error", err)
 		return nil, nil
 	}
 
-	// Create the app model with the current word
-	m := ui.NewAppModel(s.wordleWord)
+	// Get username from SSH session
+	username := sshSession.User()
+	if username == "" {
+		username = "anonymous"
+	}
+
+	// Check if username is blacklisted
+	isBlacklisted := stats.IsBlacklisted(username)
+
+	// Check if user has already played today (but not for blacklisted users)
+	hasPlayed := false
+	if !isBlacklisted {
+		var err error
+		hasPlayed, err = s.statsStore.HasPlayedToday(username, s.wordleDate)
+
+		if err != nil {
+			s.config.Logger.Error("Failed to check if user played today", "error", err, "username", username)
+		}
+	}
+
+	// Create the app model with the current word, stats store, and logger
+	m := ui.NewAppModel(s.wordleWord, s.wordleDate, username, s.statsStore, hasPlayed, isBlacklisted, s.config.Logger)
 
 	return m, []tea.ProgramOption{tea.WithAltScreen()}
 }
@@ -171,7 +206,7 @@ func (s *Server) Start() error {
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 
-	s.config.Logger.Info("Starting SSH server", "host", s.config.Host, "port", s.config.Port)
+	s.config.Logger.Info("Starting SSH server", "host", s.config.Host, "port", s.config.Port, "db", s.config.DBPath)
 
 	go func() {
 		if err := s.wishServer.ListenAndServe(); err != nil {
@@ -184,6 +219,11 @@ func (s *Server) Start() error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
+	// Close stats store
+	if err := s.statsStore.Close(); err != nil {
+		s.config.Logger.Error("Failed to close stats store", "error", err)
+	}
 
 	if err := s.wishServer.Shutdown(ctx); err != nil {
 		return fmt.Errorf("failed to shutdown server: %w", err)

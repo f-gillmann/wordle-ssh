@@ -1,11 +1,13 @@
 package ui
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/log"
 	"github.com/f-gillmann/wordle-ssh/internal/wordle"
 )
 
@@ -46,9 +48,12 @@ type GameModel struct {
 	errorMessage string
 	letterMap    map[rune]LetterState
 	invalidWord  bool
+	logger       *log.Logger
 }
 
-func NewGameModel(targetWord string) GameModel {
+func NewGameModel(targetWord string, logger *log.Logger) GameModel {
+	logger.Debug("Creating new game model", "targetWord", targetWord)
+
 	return GameModel{
 		targetWord:   strings.ToLower(targetWord),
 		guesses:      []string{},
@@ -56,6 +61,7 @@ func NewGameModel(targetWord string) GameModel {
 		guessResults: [][]GuessResult{},
 		state:        GameStatePlaying,
 		letterMap:    make(map[rune]LetterState),
+		logger:       logger,
 	}
 }
 
@@ -68,33 +74,39 @@ func (m GameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c":
+			m.logger.Debug("User quit game")
 			m.state = GameStateQuit
 			return m, tea.Quit
 
 		case "esc":
+			m.logger.Debug("User returned to menu")
 			m.state = GameStateMenu
 			return m, nil
 
 		case "enter":
 			if m.state != GameStatePlaying {
 				// Return to menu if game is over
+				m.logger.Debug("User returned to menu after game ended")
 				m.state = GameStateMenu
 				return m, nil
 			}
 
 			if len([]rune(m.currentGuess)) != WordLength {
+				m.logger.Debug("Invalid guess length", "guess", m.currentGuess, "length", len([]rune(m.currentGuess)))
 				m.errorMessage = fmt.Sprintf("Word must be %d letters\n", WordLength)
 				return m, nil
 			}
 
 			// Validate the guess against the wordlist
 			if !wordle.IsValidWord(strings.ToLower(m.currentGuess)) {
+				m.logger.Debug("Invalid word attempted", "guess", m.currentGuess)
 				m.invalidWord = true
 				m.errorMessage = "Invalid word\n"
 				return m, nil
 			}
 
 			// Process the guess
+			m.logger.Info("Valid guess submitted", "guess", m.currentGuess, "attempt", len(m.guesses)+1)
 			m.errorMessage = ""
 			m.invalidWord = false
 			m.guesses = append(m.guesses, m.currentGuess)
@@ -117,8 +129,10 @@ func (m GameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Check win condition
 			if strings.ToLower(m.currentGuess) == m.targetWord {
+				m.logger.Info("Game won", "attempts", len(m.guesses), "targetWord", m.targetWord)
 				m.state = GameStateWon
 			} else if len(m.guesses) >= MaxGuesses {
+				m.logger.Info("Game lost", "attempts", len(m.guesses), "targetWord", m.targetWord)
 				m.state = GameStateLost
 			}
 
@@ -239,7 +253,7 @@ func (m GameModel) View() string {
 					if m.invalidWord {
 						style = TileStyleInvalid
 					}
-					
+
 					tiles = append(tiles, style.Render(string([]rune(m.currentGuess)[j])))
 				} else {
 					tiles = append(tiles, TileStyleEmpty.Render(" "))
@@ -287,4 +301,45 @@ func (m GameModel) View() string {
 
 func (m GameModel) GetState() GameState {
 	return m.state
+}
+
+// GetGameResultJSON returns the game result as a JSON string for storage
+func (m GameModel) GetGameResultJSON() string {
+	type GameResultData struct {
+		Won     bool       `json:"won"`
+		Guesses [][]string `json:"guesses"` // Each guess is array of [letter, state]
+	}
+
+	result := GameResultData{
+		Won:     m.state == GameStateWon,
+		Guesses: [][]string{},
+	}
+
+	// Convert guess results to simplified format
+	for _, guessResult := range m.guessResults {
+		var guess []string
+		for _, gr := range guessResult {
+			var state string
+			switch gr.State {
+			case LetterStateCorrect:
+				state = "correct"
+			case LetterStatePresent:
+				state = "present"
+			case LetterStateAbsent:
+				state = "absent"
+			}
+
+			guess = append(guess, gr.Letter, state)
+		}
+
+		result.Guesses = append(result.Guesses, guess)
+	}
+
+	jsonBytes, err := json.Marshal(result)
+	if err != nil {
+		m.logger.Error("Failed to marshal game result", "error", err)
+		return ""
+	}
+
+	return string(jsonBytes)
 }

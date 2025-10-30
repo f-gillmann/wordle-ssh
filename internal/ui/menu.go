@@ -11,6 +11,7 @@ type MenuState int
 const (
 	MenuStateMain MenuState = iota
 	MenuStateGame
+	MenuStateStats
 	MenuStateExit
 )
 
@@ -20,21 +21,34 @@ type MenuItem struct {
 }
 
 type MenuModel struct {
-	choices  []MenuItem
-	cursor   int
-	selected int
-	state    MenuState
+	choices   []MenuItem
+	cursor    int
+	selected  int
+	state     MenuState
+	showStats bool
 }
 
 func NewMenuModel() MenuModel {
+	return NewMenuModelWithStats(true)
+}
+
+func NewMenuModelWithStats(showStats bool) MenuModel {
+	choices := []MenuItem{
+		{Title: "Play Wordle", Description: "Start a new game"},
+	}
+
+	if showStats {
+		choices = append(choices, MenuItem{Title: "View Stats", Description: "View your statistics"})
+	}
+
+	choices = append(choices, MenuItem{Title: "Exit", Description: "Quit the application"})
+
 	return MenuModel{
-		choices: []MenuItem{
-			{Title: "Play Wordle", Description: "Start a new game"},
-			{Title: "Exit", Description: "Quit the application"},
-		},
-		cursor:   0,
-		selected: -1,
-		state:    MenuStateMain,
+		choices:   choices,
+		cursor:    0,
+		selected:  -1,
+		state:     MenuStateMain,
+		showStats: showStats,
 	}
 }
 
@@ -62,14 +76,20 @@ func (m MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "enter":
 			m.selected = m.cursor
-			switch m.cursor {
-			case 0: // Play Wordle
+
+			// Determine action based on menu choice
+			if m.cursor == 0 {
+				// Play Wordle
 				m.state = MenuStateGame
-			case 1: // Exit
+			} else if m.showStats && m.cursor == 1 {
+				// Stats (if the username is not blacklisted)
+				m.state = MenuStateStats
+			} else if (!m.showStats && m.cursor == 1) || (m.showStats && m.cursor == 2) {
+				// Exit
 				m.state = MenuStateExit
 				return m, tea.Quit
 			}
-			
+
 			return m, nil
 		}
 	}
@@ -89,11 +109,12 @@ func (m MenuModel) View() string {
 		} else {
 			s += MenuItemStyle.Render(fmt.Sprintf("%s %s", cursor, choice.Title))
 		}
+
 		s += "\n"
 	}
 
 	s += "\n"
-	s += HelpStyle.Render("↑/↓/j/k to navigate | Enter to select | q/Ctrl+C to quit")
+	s += HelpStyle.Render("↑/↓/j/k to navigate | Enter to select | Q/Ctrl+C to quit")
 
 	return s
 }

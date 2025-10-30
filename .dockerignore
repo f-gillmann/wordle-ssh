@@ -32,3 +32,8 @@ go.work
 # Environment files
 .env
 .env.local
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
