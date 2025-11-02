@@ -219,10 +219,45 @@ func (m GameModel) evaluateGuess(guess string) []GuessResult {
 	return result
 }
 
+func (m GameModel) renderKeyboard() string {
+	rows := []string{
+		"QWERTYUIOP",
+		"ASDFGHJKL",
+		"ZXCVBNM",
+	}
+
+	var keyboardLines []string
+	for _, row := range rows {
+		var keys []string
+		for _, letter := range row {
+			var style lipgloss.Style
+			if state, exists := m.letterMap[rune(strings.ToLower(string(letter))[0])]; exists {
+				switch state {
+				case LetterStateCorrect:
+					style = KeyStyleCorrect
+				case LetterStatePresent:
+					style = KeyStylePresent
+				case LetterStateAbsent:
+					style = KeyStyleAbsent
+				default:
+					style = KeyStyleUnused
+				}
+			} else {
+				style = KeyStyleUnused
+			}
+			keys = append(keys, style.Render(string(letter)))
+		}
+		keyboardLines = append(keyboardLines, lipgloss.JoinHorizontal(lipgloss.Top, keys...))
+	}
+
+	return strings.Join(keyboardLines, "\n")
+}
+
 func (m GameModel) View() string {
 	var s strings.Builder
 
 	// Render previous guesses
+	var boardLines []string
 	for i := 0; i < MaxGuesses; i++ {
 		var tiles []string
 
@@ -266,11 +301,18 @@ func (m GameModel) View() string {
 			}
 		}
 
-		s.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, tiles...))
-		s.WriteString("\n")
+		boardLines = append(boardLines, lipgloss.JoinHorizontal(lipgloss.Top, tiles...))
 	}
 
-	s.WriteString("\n")
+	// Render game board
+	gameBoard := lipgloss.NewStyle().PaddingLeft(4).Render(strings.Join(boardLines, "\n"))
+	s.WriteString(gameBoard)
+	s.WriteString("\n\n")
+
+	// Render keyboard
+	keyboard := lipgloss.NewStyle().Align(lipgloss.Center).MarginLeft(2).Render(m.renderKeyboard())
+	s.WriteString(keyboard)
+	s.WriteString("\n\n")
 
 	// Show game state messages
 	switch m.state {

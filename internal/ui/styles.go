@@ -15,7 +15,7 @@ var (
 	colorBrightGreen = lipgloss.Color("#00FF00")
 
 	TileStyleCorrect = lipgloss.NewStyle().
-				Foreground(colorWhite).
+				Foreground(colorGreen).
 				Padding(0, 1).
 				Bold(true).
 				Border(lipgloss.NormalBorder()).
@@ -24,7 +24,7 @@ var (
 				Align(lipgloss.Center)
 
 	TileStylePresent = lipgloss.NewStyle().
-				Foreground(colorWhite).
+				Foreground(colorYellow).
 				Padding(0, 1).
 				Bold(true).
 				Border(lipgloss.NormalBorder()).
@@ -33,7 +33,7 @@ var (
 				Align(lipgloss.Center)
 
 	TileStyleAbsent = lipgloss.NewStyle().
-			Foreground(colorWhite).
+			Foreground(colorGray).
 			Padding(0, 1).
 			Bold(true).
 			Border(lipgloss.NormalBorder()).
@@ -84,4 +84,31 @@ var (
 	SuccessStyle = lipgloss.NewStyle().
 			Foreground(colorBrightGreen).
 			Bold(true)
+
+	KeyStyleUnused = lipgloss.NewStyle().
+			Foreground(colorWhite).
+			Padding(0, 1).
+			Bold(true).
+			Align(lipgloss.Center)
+
+	KeyStyleCorrect = lipgloss.NewStyle().
+			Foreground(colorWhite).
+			Background(colorGreen).
+			Padding(0, 1).
+			Bold(true).
+			Align(lipgloss.Center)
+
+	KeyStylePresent = lipgloss.NewStyle().
+			Foreground(colorWhite).
+			Background(colorYellow).
+			Padding(0, 1).
+			Bold(true).
+			Align(lipgloss.Center)
+
+	KeyStyleAbsent = lipgloss.NewStyle().
+			Foreground(colorWhite).
+			Background(colorGray).
+			Padding(0, 1).
+			Bold(true).
+			Align(lipgloss.Center)
 )
