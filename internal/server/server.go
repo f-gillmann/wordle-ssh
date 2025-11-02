@@ -137,6 +137,7 @@ func New(config Config) (*Server, error) {
 		wish.WithAddress(fmt.Sprintf("%s:%s", config.Host, config.Port)),
 		wish.WithHostKeyPath(config.HostKeyPath),
 		wish.WithMiddleware(
+			s.blacklistCommandMiddleware,
 			bubbletea.MiddlewareWithColorProfile(s.teaHandler, termenv.ANSI256),
 			activeterm.Middleware(),
 			logging.StructuredMiddlewareWithLogger(config.Logger, config.LogLevel),
@@ -148,6 +149,22 @@ func New(config Config) (*Server, error) {
 	s.wishServer = wishServer
 
 	return s, nil
+}
+
+// blacklistCommandMiddleware rejects command execution from blacklisted users
+func (s *Server) blacklistCommandMiddleware(next ssh.Handler) ssh.Handler {
+	return func(sess ssh.Session) {
+		username := sess.User()
+		if stats.IsBlacklisted(username) {
+			// Check if they're trying to execute a command
+			if len(sess.Command()) > 0 {
+				s.config.Logger.Info("Rejected command from blacklisted user", "username", username, "command", sess.Command())
+				_ = sess.Exit(1)
+				return
+			}
+		}
+		next(sess)
+	}
 }
 
 // refreshWordleWord fetches the Wordle word only if it's a new day
