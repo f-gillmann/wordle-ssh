@@ -1,4 +1,4 @@
-name: Docker Deploy
+name: Deploy
 
 on:
   workflow_dispatch:
@@ -6,6 +6,9 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: Checkout code
