@@ -1,4 +1,4 @@
-package ui
+package models
 
 import (
 	"encoding/json"
@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
+	"github.com/f-gillmann/wordle-ssh/internal/ui/styles"
 	"github.com/f-gillmann/wordle-ssh/internal/wordle"
 )
 
@@ -234,16 +235,16 @@ func (m GameModel) renderKeyboard() string {
 			if state, exists := m.letterMap[rune(strings.ToLower(string(letter))[0])]; exists {
 				switch state {
 				case LetterStateCorrect:
-					style = KeyStyleCorrect
+					style = styles.KeyStyleCorrect
 				case LetterStatePresent:
-					style = KeyStylePresent
+					style = styles.KeyStylePresent
 				case LetterStateAbsent:
-					style = KeyStyleAbsent
+					style = styles.KeyStyleAbsent
 				default:
-					style = KeyStyleUnused
+					style = styles.KeyStyleUnused
 				}
 			} else {
-				style = KeyStyleUnused
+				style = styles.KeyStyleUnused
 			}
 			keys = append(keys, style.Render(string(letter)))
 		}
@@ -268,13 +269,13 @@ func (m GameModel) View() string {
 
 				switch result.State {
 				case LetterStateCorrect:
-					style = TileStyleCorrect
+					style = styles.TileStyleCorrect
 				case LetterStatePresent:
-					style = TileStylePresent
+					style = styles.TileStylePresent
 				case LetterStateAbsent:
-					style = TileStyleAbsent
+					style = styles.TileStyleAbsent
 				default:
-					style = TileStyleEmpty
+					style = styles.TileStyleEmpty
 				}
 
 				tiles = append(tiles, style.Render(result.Letter))
@@ -284,20 +285,20 @@ func (m GameModel) View() string {
 			for j := 0; j < WordLength; j++ {
 				if j < len([]rune(m.currentGuess)) {
 					// Use red style if word is invalid
-					style := TileStyleEmpty
+					style := styles.TileStyleEmpty
 					if m.invalidWord {
-						style = TileStyleInvalid
+						style = styles.TileStyleInvalid
 					}
 
 					tiles = append(tiles, style.Render(string([]rune(m.currentGuess)[j])))
 				} else {
-					tiles = append(tiles, TileStyleEmpty.Render(" "))
+					tiles = append(tiles, styles.TileStyleEmpty.Render(" "))
 				}
 			}
 		} else {
 			// Render empty row
 			for j := 0; j < WordLength; j++ {
-				tiles = append(tiles, TileStyleEmpty.Render(" "))
+				tiles = append(tiles, styles.TileStyleEmpty.Render(" "))
 			}
 		}
 
@@ -317,25 +318,25 @@ func (m GameModel) View() string {
 	// Show game state messages
 	switch m.state {
 	case GameStateWon:
-		s.WriteString(SuccessStyle.Render(fmt.Sprintf("Congratulations! You won in %d guesses!", len(m.guesses))))
+		s.WriteString(styles.SuccessStyle.Render(fmt.Sprintf("Congratulations! You won in %d guesses!", len(m.guesses))))
 		s.WriteString("\n\n")
-		s.WriteString(HelpStyle.Render("Enter/Esc to menu | Ctrl+C to quit"))
+		s.WriteString(styles.HelpStyle.Render("Enter/Esc to menu | Ctrl+C to quit"))
 	case GameStateLost:
-		s.WriteString(ErrorStyle.Render(fmt.Sprintf("Game Over!")))
+		s.WriteString(styles.ErrorStyle.Render(fmt.Sprintf("Game Over!")))
 		s.WriteString("\n\n")
-		s.WriteString(HelpStyle.Render("Enter/Esc to menu | Ctrl+C to quit"))
+		s.WriteString(styles.HelpStyle.Render("Enter/Esc to menu | Ctrl+C to quit"))
 	case GameStatePlaying:
 		if m.errorMessage != "" {
-			s.WriteString(ErrorStyle.Render(m.errorMessage))
+			s.WriteString(styles.ErrorStyle.Render(m.errorMessage))
 			s.WriteString("\n")
 		}
 
-		s.WriteString(HelpStyle.Render(fmt.Sprintf("Guess %d/%d", len(m.guesses)+1, MaxGuesses)))
+		s.WriteString(styles.HelpStyle.Render(fmt.Sprintf("Guess %d/%d", len(m.guesses)+1, MaxGuesses)))
 		s.WriteString("\n\n")
-		s.WriteString(HelpStyle.Render("Enter to submit | Backspace to delete | Esc to menu | Ctrl+C to quit"))
+		s.WriteString(styles.HelpStyle.Render("Enter to submit | Backspace to delete | Esc to menu | Ctrl+C to quit"))
 	default:
 		// Unknown state, show playing instructions
-		s.WriteString(HelpStyle.Render("Esc to menu | Ctrl+C to quit"))
+		s.WriteString(styles.HelpStyle.Render("Esc to menu | Ctrl+C to quit"))
 	}
 
 	return s.String()
@@ -384,4 +385,9 @@ func (m GameModel) GetGameResultJSON() string {
 	}
 
 	return string(jsonBytes)
+}
+
+// GetGuessCount returns the number of guesses made
+func (m GameModel) GetGuessCount() int {
+	return len(m.guesses)
 }

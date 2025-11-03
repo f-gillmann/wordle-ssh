@@ -1,4 +1,4 @@
-package ui
+package models
 
 import (
 	"encoding/json"
@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/f-gillmann/wordle-ssh/internal/ui/styles"
 )
 
 type AlreadyPlayedModel struct {
@@ -88,13 +89,13 @@ func (m AlreadyPlayedModel) View() string {
 					var style lipgloss.Style
 					switch state {
 					case "correct":
-						style = TileStyleCorrect
+						style = styles.TileStyleCorrect
 					case "present":
-						style = TileStylePresent
+						style = styles.TileStylePresent
 					case "absent":
-						style = TileStyleAbsent
+						style = styles.TileStyleAbsent
 					default:
-						style = TileStyleEmpty
+						style = styles.TileStyleEmpty
 					}
 
 					tiles = append(tiles, style.Render("*"))
@@ -111,7 +112,7 @@ func (m AlreadyPlayedModel) View() string {
 			for i := 0; i < remainingGuesses; i++ {
 				var emptyTiles []string
 				for j := 0; j < WordLength; j++ {
-					emptyTiles = append(emptyTiles, TileStyleEmpty.Render(" "))
+					emptyTiles = append(emptyTiles, styles.TileStyleEmpty.Render(" "))
 				}
 				s.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, emptyTiles...))
 				s.WriteString("\n")
@@ -120,9 +121,9 @@ func (m AlreadyPlayedModel) View() string {
 			s.WriteString("\n")
 
 			if result.Won {
-				s.WriteString(SuccessStyle.Render(fmt.Sprintf("You won in %d guesses!", len(result.Guesses))))
+				s.WriteString(styles.SuccessStyle.Render(fmt.Sprintf("You won in %d guesses!", len(result.Guesses))))
 			} else {
-				s.WriteString(ErrorStyle.Render("You didn't get it this time."))
+				s.WriteString(styles.ErrorStyle.Render("You didn't get it this time."))
 			}
 		}
 	} else {
@@ -130,7 +131,7 @@ func (m AlreadyPlayedModel) View() string {
 	}
 
 	s.WriteString("\n\n")
-	s.WriteString(HelpStyle.Render("Any key to return | Q/Ctrl+C to quit"))
+	s.WriteString(styles.HelpStyle.Render("Any key to return | Q/Ctrl+C to quit"))
 
 	return s.String()
 }

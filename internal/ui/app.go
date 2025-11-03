@@ -4,6 +4,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/log"
 	"github.com/f-gillmann/wordle-ssh/internal/stats"
+	"github.com/f-gillmann/wordle-ssh/internal/ui/models"
 )
 
 type AppState int
@@ -13,13 +14,15 @@ const (
 	AppStateGame
 	AppStateStats
 	AppStateAlreadyPlayed
+	AppStateDeleteData
 )
 
 type AppModel struct {
-	menu              MenuModel
-	game              GameModel
-	statsView         StatsModel
-	alreadyPlayedView AlreadyPlayedModel
+	menu              models.MenuModel
+	game              models.GameModel
+	statsView         models.StatsModel
+	alreadyPlayedView models.AlreadyPlayedModel
+	deleteDataView    models.DeleteDataModel
 	state             AppState
 	targetWord        string
 	wordDate          string
@@ -27,12 +30,19 @@ type AppModel struct {
 	sshKeyFingerprint string
 	statsStore        *stats.Store
 	hasPlayedToday    bool
+	hasUserData       bool
 	logger            *log.Logger
 }
 
 func NewAppModel(targetWord string, wordDate string, username string, sshKeyFingerprint string, statsStore *stats.Store, hasPlayedToday bool, logger *log.Logger) AppModel {
+	// Check if user has any data
+	hasUserData := false
+	if userStats, err := statsStore.GetUserStats(username, sshKeyFingerprint); err == nil && userStats.GamesPlayed > 0 {
+		hasUserData = true
+	}
+
 	return AppModel{
-		menu:              NewMenuModel(),
+		menu:              models.NewMenuModel(hasUserData),
 		state:             AppStateMenu,
 		targetWord:        targetWord,
 		wordDate:          wordDate,
@@ -40,6 +50,7 @@ func NewAppModel(targetWord string, wordDate string, username string, sshKeyFing
 		sshKeyFingerprint: sshKeyFingerprint,
 		statsStore:        statsStore,
 		hasPlayedToday:    hasPlayedToday,
+		hasUserData:       hasUserData,
 		logger:            logger,
 	}
 }
@@ -53,10 +64,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case AppStateMenu:
 		var cmd tea.Cmd
 		menuModel, cmd := m.menu.Update(msg)
-		m.menu = menuModel.(MenuModel)
+		m.menu = menuModel.(models.MenuModel)
 
 		// Check if we should transition to game
-		if m.menu.GetState() == MenuStateGame {
+		if m.menu.GetState() == models.MenuStateGame {
 			if m.hasPlayedToday {
 				// User has already played today, load their result and show it
 				userStats, err := m.statsStore.GetUserStats(m.username, m.sshKeyFingerprint)
@@ -65,16 +76,16 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					userStats = &stats.UserStats{Username: m.username, SSHKeyFingerprint: m.sshKeyFingerprint}
 				}
 
-				m.alreadyPlayedView = NewAlreadyPlayedModel(userStats.LastGameResult)
+				m.alreadyPlayedView = models.NewAlreadyPlayedModel(userStats.LastGameResult)
 				m.state = AppStateAlreadyPlayed
 
 				return m, m.alreadyPlayedView.Init()
 			}
-			m.game = NewGameModel(m.targetWord, m.logger)
+			m.game = models.NewGameModel(m.targetWord, m.logger)
 			m.state = AppStateGame
 
 			return m, m.game.Init()
-		} else if m.menu.GetState() == MenuStateStats {
+		} else if m.menu.GetState() == models.MenuStateStats {
 			// Load and show user stats
 			userStats, err := m.statsStore.GetUserStats(m.username, m.sshKeyFingerprint)
 			if err != nil {
@@ -83,11 +94,17 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				userStats = &stats.UserStats{Username: m.username, SSHKeyFingerprint: m.sshKeyFingerprint}
 			}
 
-			m.statsView = NewStatsModel(userStats)
+			m.statsView = models.NewStatsModel(userStats)
 			m.state = AppStateStats
 
 			return m, m.statsView.Init()
-		} else if m.menu.GetState() == MenuStateExit {
+		} else if m.menu.GetState() == models.MenuStateDeleteData {
+			// Show delete data confirmation
+			m.deleteDataView = models.NewDeleteDataModel(m.username)
+			m.state = AppStateDeleteData
+
+			return m, m.deleteDataView.Init()
+		} else if m.menu.GetState() == models.MenuStateExit {
 			return m, tea.Quit
 		}
 
@@ -96,12 +113,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case AppStateGame:
 		var cmd tea.Cmd
 		gameModel, cmd := m.game.Update(msg)
-		m.game = gameModel.(GameModel)
+		m.game = gameModel.(models.GameModel)
 
 		// Check if game ended and record stats
-		if m.game.GetState() == GameStateWon {
+		if m.game.GetState() == models.GameStateWon {
 			// Record win with number of guesses and game result
-			guesses := len(m.game.guesses)
+			guesses := m.game.GetGuessCount()
 			gameResultJSON := m.game.GetGameResultJSON()
 
 			if err := m.statsStore.RecordWin(m.username, m.sshKeyFingerprint, guesses, m.wordDate, gameResultJSON); err != nil {
@@ -109,8 +126,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				// Mark that user has played today
 				m.hasPlayedToday = true
+				m.hasUserData = true
 			}
-		} else if m.game.GetState() == GameStateLost {
+		} else if m.game.GetState() == models.GameStateLost {
 			// Record loss with game result
 			gameResultJSON := m.game.GetGameResultJSON()
 
@@ -119,15 +137,16 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				// Mark that user has played today
 				m.hasPlayedToday = true
+				m.hasUserData = true
 			}
 		}
 
 		// Check if we should return to menu or quit
-		if m.game.GetState() == GameStateMenu {
-			m.menu = NewMenuModel()
+		if m.game.GetState() == models.GameStateMenu {
+			m.menu = models.NewMenuModel(m.hasUserData)
 			m.state = AppStateMenu
 			return m, m.menu.Init()
-		} else if m.game.GetState() == GameStateQuit {
+		} else if m.game.GetState() == models.GameStateQuit {
 			return m, tea.Quit
 		}
 
@@ -136,12 +155,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case AppStateStats:
 		var cmd tea.Cmd
 		statsModel, cmd := m.statsView.Update(msg)
-		m.statsView = statsModel.(StatsModel)
+		m.statsView = statsModel.(models.StatsModel)
 
 		// Check if any key was pressed to return to menu
 		if _, ok := msg.(tea.KeyMsg); ok {
 			// Any key returns to menu
-			m.menu = NewMenuModel()
+			m.menu = models.NewMenuModel(m.hasUserData)
 			m.state = AppStateMenu
 			return m, m.menu.Init()
 		}
@@ -151,7 +170,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case AppStateAlreadyPlayed:
 		var cmd tea.Cmd
 		alreadyPlayedModel, cmd := m.alreadyPlayedView.Update(msg)
-		m.alreadyPlayedView = alreadyPlayedModel.(AlreadyPlayedModel)
+		m.alreadyPlayedView = alreadyPlayedModel.(models.AlreadyPlayedModel)
 
 		// If quit command was issued (Ctrl+C), pass it through
 		if cmd != nil {
@@ -166,7 +185,34 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Check if any key was pressed to return to menu
 		if _, ok := msg.(tea.KeyMsg); ok {
 			// Any other key returns to menu
-			m.menu = NewMenuModel()
+			m.menu = models.NewMenuModel(m.hasUserData)
+			m.state = AppStateMenu
+			return m, m.menu.Init()
+		}
+
+		return m, cmd
+
+	case AppStateDeleteData:
+		var cmd tea.Cmd
+		deleteDataModel, cmd := m.deleteDataView.Update(msg)
+		m.deleteDataView = deleteDataModel.(models.DeleteDataModel)
+
+		// Check if user confirmed deletion
+		if m.deleteDataView.GetState() == models.DeleteDataStateDeleted {
+			// Actually delete the data
+			if err := m.statsStore.DeleteUserData(m.username, m.sshKeyFingerprint); err != nil {
+				m.logger.Error("Failed to delete user data", "error", err, "username", m.username)
+			} else {
+				m.logger.Info("Successfully deleted user data", "username", m.username)
+				// Reset hasPlayedToday and hasUserData flags since data is deleted
+				m.hasPlayedToday = false
+				m.hasUserData = false
+			}
+		}
+
+		// Check if we should return to menu
+		if m.deleteDataView.GetState() == models.DeleteDataStateMenu {
+			m.menu = models.NewMenuModel(m.hasUserData)
 			m.state = AppStateMenu
 			return m, m.menu.Init()
 		}
@@ -188,6 +234,8 @@ func (m AppModel) View() string {
 		return m.statsView.View()
 	case AppStateAlreadyPlayed:
 		return m.alreadyPlayedView.View()
+	case AppStateDeleteData:
+		return m.deleteDataView.View()
 	default:
 		return ""
 	}

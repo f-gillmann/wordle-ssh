@@ -325,7 +325,30 @@ func (stats *UserStats) GetWinRate() float64 {
 	return float64(stats.GamesWon) / float64(stats.GamesPlayed) * 100
 }
 
+// DeleteUserData deletes all data for a specific user
+func (s *Store) DeleteUserData(username string, sshKeyFingerprint string) error {
+	s.logger.Info("Deleting user data", "username", username, "ssh_key_fingerprint", sshKeyFingerprint)
+
+	query := `DELETE FROM user_stats WHERE username = ? AND ssh_key_fingerprint = ?`
+
+	result, err := s.db.Exec(query, username, sshKeyFingerprint)
+	if err != nil {
+		return fmt.Errorf("failed to delete user data: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	s.logger.Info("User data deleted", "username", username, "rows_affected", rowsAffected)
+	return nil
+}
+
 // Close closes the database connection
 func (s *Store) Close() error {
-	return s.db.Close()
+	if s.db != nil {
+		return s.db.Close()
+	}
+	return nil
 }

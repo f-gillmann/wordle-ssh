@@ -1,4 +1,4 @@
-package ui
+package styles
 
 import "github.com/charmbracelet/lipgloss"
 
@@ -65,6 +65,10 @@ var (
 			BorderForeground(colorLightGray).
 			Padding(0, 4)
 
+	MenuTitleWarnStyle = MenuTitleStyle.
+				BorderForeground(colorYellow).
+				Foreground(colorYellow)
+
 	MenuItemStyle = lipgloss.NewStyle().
 			PaddingLeft(2).
 			Foreground(colorLightGray)
@@ -111,8 +115,4 @@ var (
 			Padding(0, 1).
 			Bold(true).
 			Align(lipgloss.Center)
-
-	WarningStyle = lipgloss.NewStyle().
-			Foreground(colorYellow).
-			Bold(true)
 )

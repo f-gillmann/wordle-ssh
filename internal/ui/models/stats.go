@@ -1,4 +1,4 @@
-package ui
+package models
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/f-gillmann/wordle-ssh/internal/stats"
+	"github.com/f-gillmann/wordle-ssh/internal/ui/styles"
 )
 
 type StatsModel struct {
@@ -139,7 +140,7 @@ func (m StatsModel) View() string {
 	s.WriteString("\n")
 
 	s.WriteString("\n")
-	s.WriteString(HelpStyle.Render("Press any key to return"))
+	s.WriteString(styles.HelpStyle.Render("Press any key to return"))
 
 	return s.String()
 }
