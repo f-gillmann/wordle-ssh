@@ -19,6 +19,7 @@ import (
 	"github.com/f-gillmann/wordle-ssh/internal/ui"
 	"github.com/f-gillmann/wordle-ssh/internal/wordle"
 	"github.com/muesli/termenv"
+	gossh "golang.org/x/crypto/ssh"
 )
 
 const (
@@ -132,39 +133,36 @@ func New(config Config) (*Server, error) {
 		return nil, fmt.Errorf("failed to fetch wordle word: %w", err)
 	}
 
+	checkBlacklist := func(ctx ssh.Context) bool {
+		username := ctx.User()
+		if stats.IsBlacklisted(username) {
+			config.Logger.Info("Blocked connection from blacklisted user", "username", username, "address", ctx.RemoteAddr(), "client", ctx.ClientVersion())
+			return false
+		}
+
+		return true
+	}
+
 	// Create wish server with bubbletea middleware
 	wishServer, err := wish.NewServer(
 		wish.WithAddress(fmt.Sprintf("%s:%s", config.Host, config.Port)),
 		wish.WithHostKeyPath(config.HostKeyPath),
+		wish.WithPublicKeyAuth(func(ctx ssh.Context, key ssh.PublicKey) bool {
+			return checkBlacklist(ctx)
+		}),
 		wish.WithMiddleware(
-			s.blacklistCommandMiddleware,
 			bubbletea.MiddlewareWithColorProfile(s.teaHandler, termenv.ANSI256),
 			activeterm.Middleware(),
 			logging.StructuredMiddlewareWithLogger(config.Logger, config.LogLevel),
 		),
 	)
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to create server: %w", err)
 	}
+
 	s.wishServer = wishServer
-
 	return s, nil
-}
-
-// blacklistCommandMiddleware rejects command execution from blacklisted users
-func (s *Server) blacklistCommandMiddleware(next ssh.Handler) ssh.Handler {
-	return func(sess ssh.Session) {
-		username := sess.User()
-		if stats.IsBlacklisted(username) {
-			// Check if they're trying to execute a command
-			if len(sess.Command()) > 0 {
-				s.config.Logger.Info("Rejected command from blacklisted user", "username", username, "command", sess.Command())
-				_ = sess.Exit(1)
-				return
-			}
-		}
-		next(sess)
-	}
 }
 
 // refreshWordleWord fetches the Wordle word only if it's a new day
@@ -201,22 +199,22 @@ func (s *Server) teaHandler(sshSession ssh.Session) (tea.Model, []tea.ProgramOpt
 		username = "anonymous"
 	}
 
-	// Check if username is blacklisted
-	isBlacklisted := stats.IsBlacklisted(username)
+	// Get SSH key fingerprint from session
+	sshKeyFingerprint := gossh.FingerprintSHA256(sshSession.PublicKey())
+	s.config.Logger.Debug("User connecting",
+		"username", username,
+		"ssh_key_fingerprint", sshKeyFingerprint,
+		"key_type", sshSession.PublicKey().Type(),
+	)
 
-	// Check if user has already played today (but not for blacklisted users)
-	hasPlayed := false
-	if !isBlacklisted {
-		var err error
-		hasPlayed, err = s.statsStore.HasPlayedToday(username, s.wordleDate)
-
-		if err != nil {
-			s.config.Logger.Error("Failed to check if user played today", "error", err, "username", username)
-		}
+	// Check if user has already played today
+	hasPlayed, err := s.statsStore.HasPlayedToday(username, sshKeyFingerprint, s.wordleDate)
+	if err != nil {
+		s.config.Logger.Error("Failed to check if user played today", "error", err, "username", username)
 	}
 
 	// Create the app model with the current word, stats store, and logger
-	m := ui.NewAppModel(s.wordleWord, s.wordleDate, username, s.statsStore, hasPlayed, isBlacklisted, s.config.Logger)
+	m := ui.NewAppModel(s.wordleWord, s.wordleDate, username, sshKeyFingerprint, s.statsStore, hasPlayed, s.config.Logger)
 
 	opts := []tea.ProgramOption{tea.WithAltScreen()}
 	opts = append(opts, bubbletea.MakeOptions(sshSession)...)

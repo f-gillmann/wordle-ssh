@@ -13,6 +13,7 @@ import (
 // UserStats represents a user's game statistics
 type UserStats struct {
 	Username          string
+	SSHKeyFingerprint string
 	GamesPlayed       int
 	GamesWon          int
 	GamesLost         int
@@ -54,7 +55,8 @@ func NewStore(dbPath string, logger *log.Logger) (*Store, error) {
 func (s *Store) initSchema() error {
 	schema := `
 	CREATE TABLE IF NOT EXISTS user_stats (
-		username TEXT PRIMARY KEY,
+		username TEXT NOT NULL,
+		ssh_key_fingerprint TEXT NOT NULL,
 		games_played INTEGER DEFAULT 0,
 		games_won INTEGER DEFAULT 0,
 		games_lost INTEGER DEFAULT 0,
@@ -71,11 +73,13 @@ func (s *Store) initSchema() error {
 		last_word_date TEXT,
 		last_game_result TEXT,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (username, ssh_key_fingerprint)
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_last_played ON user_stats(last_played);
 	CREATE INDEX IF NOT EXISTS idx_games_won ON user_stats(games_won DESC);
+	CREATE INDEX IF NOT EXISTS idx_ssh_key ON user_stats(ssh_key_fingerprint);
 	`
 
 	if _, err := s.db.Exec(schema); err != nil {
@@ -94,6 +98,7 @@ func (s *Store) scanUserStats(scanner interface {
 
 	err := scanner.Scan(
 		&stats.Username,
+		&stats.SSHKeyFingerprint,
 		&stats.GamesPlayed,
 		&stats.GamesWon,
 		&stats.GamesLost,
@@ -122,23 +127,27 @@ func (s *Store) scanUserStats(scanner interface {
 	return nil
 }
 
-// GetUserStats retrieves statistics for a user
-func (s *Store) GetUserStats(username string) (*UserStats, error) {
+// GetUserStats retrieves statistics for a user by username AND ssh_key_fingerprint pair
+func (s *Store) GetUserStats(username string, sshKeyFingerprint string) (*UserStats, error) {
+	s.logger.Debug("Reading user stats", "username", username, "ssh_key_fingerprint", sshKeyFingerprint)
+
 	query := `
-		SELECT username, games_played, games_won, games_lost, current_streak, max_streak,
+		SELECT username, ssh_key_fingerprint, games_played, games_won, games_lost, current_streak, max_streak,
 		       guess_dist_1, guess_dist_2, guess_dist_3, guess_dist_4, guess_dist_5, guess_dist_6,
 		       total_guesses, last_played, COALESCE(last_word_date, ''), COALESCE(last_game_result, '')
 		FROM user_stats
-		WHERE username = ?
+		WHERE username = ? AND ssh_key_fingerprint = ?
 	`
 
 	var stats UserStats
 
-	err := s.scanUserStats(s.db.QueryRow(query, username), &stats)
+	err := s.scanUserStats(s.db.QueryRow(query, username, sshKeyFingerprint), &stats)
 	if errors.Is(err, sql.ErrNoRows) {
 		// Return empty stats for new user
+		s.logger.Debug("No existing stats found, returning empty stats for new user", "username", username)
 		return &UserStats{
-			Username: username,
+			Username:          username,
+			SSHKeyFingerprint: sshKeyFingerprint,
 		}, nil
 	}
 
@@ -146,26 +155,44 @@ func (s *Store) GetUserStats(username string) (*UserStats, error) {
 		return nil, fmt.Errorf("failed to get user stats: %w", err)
 	}
 
+	s.logger.Debug("Successfully retrieved user stats",
+		"username", username,
+		"games_played", stats.GamesPlayed,
+		"games_won", stats.GamesWon,
+		"current_streak", stats.CurrentStreak,
+		"last_word_date", stats.LastWordDate,
+	)
+
 	return &stats, nil
 }
 
 // HasPlayedToday checks if the user has already played today's word
-func (s *Store) HasPlayedToday(username string, wordDate string) (bool, error) {
-	stats, err := s.GetUserStats(username)
+func (s *Store) HasPlayedToday(username string, sshKeyFingerprint string, wordDate string) (bool, error) {
+	s.logger.Debug("Checking if user has played today", "username", username, "word_date", wordDate)
+
+	stats, err := s.GetUserStats(username, sshKeyFingerprint)
 	if err != nil {
 		return false, err
 	}
 
-	return stats.LastWordDate == wordDate, nil
+	hasPlayed := stats.LastWordDate == wordDate
+	s.logger.Debug("Played today check result",
+		"username", username,
+		"has_played", hasPlayed,
+		"last_word_date", stats.LastWordDate,
+		"current_word_date", wordDate,
+	)
+
+	return hasPlayed, nil
 }
 
 // RecordWin records a winning game for a user
-func (s *Store) RecordWin(username string, guesses int, wordDate string, gameResult string) error {
+func (s *Store) RecordWin(username string, sshKeyFingerprint string, guesses int, wordDate string, gameResult string) error {
 	if guesses < 1 || guesses > 6 {
 		return fmt.Errorf("invalid number of guesses: %d", guesses)
 	}
 
-	stats, err := s.GetUserStats(username)
+	stats, err := s.GetUserStats(username, sshKeyFingerprint)
 	if err != nil {
 		return err
 	}
@@ -192,8 +219,8 @@ func (s *Store) RecordWin(username string, guesses int, wordDate string, gameRes
 }
 
 // RecordLoss records a losing game for a user
-func (s *Store) RecordLoss(username string, wordDate string, gameResult string) error {
-	stats, err := s.GetUserStats(username)
+func (s *Store) RecordLoss(username string, sshKeyFingerprint string, wordDate string, gameResult string) error {
+	stats, err := s.GetUserStats(username, sshKeyFingerprint)
 	if err != nil {
 		return err
 	}
@@ -215,13 +242,27 @@ func (s *Store) RecordLoss(username string, wordDate string, gameResult string) 
 
 // saveUserStats saves or updates user statistics
 func (s *Store) saveUserStats(stats *UserStats) error {
+	// Create a hash of the SSH public key for logging
+
+	s.logger.Debug("Saving user stats",
+		"username", stats.Username,
+		"ssh_key_fingerprint", stats.SSHKeyFingerprint,
+		"games_played", stats.GamesPlayed,
+		"games_won", stats.GamesWon,
+		"games_lost", stats.GamesLost,
+		"current_streak", stats.CurrentStreak,
+		"max_streak", stats.MaxStreak,
+		"total_guesses", stats.TotalGuesses,
+		"last_word_date", stats.LastWordDate,
+	)
+
 	query := `
 		INSERT INTO user_stats (
-			username, games_played, games_won, games_lost, current_streak, max_streak,
+			username, ssh_key_fingerprint, games_played, games_won, games_lost, current_streak, max_streak,
 			guess_dist_1, guess_dist_2, guess_dist_3, guess_dist_4, guess_dist_5, guess_dist_6,
 			total_guesses, last_played, last_word_date, last_game_result, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-		ON CONFLICT(username) DO UPDATE SET
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(username, ssh_key_fingerprint) DO UPDATE SET
 			games_played = excluded.games_played,
 			games_won = excluded.games_won,
 			games_lost = excluded.games_lost,
@@ -242,6 +283,7 @@ func (s *Store) saveUserStats(stats *UserStats) error {
 
 	_, err := s.db.Exec(query,
 		stats.Username,
+		stats.SSHKeyFingerprint,
 		stats.GamesPlayed,
 		stats.GamesWon,
 		stats.GamesLost,
@@ -263,6 +305,7 @@ func (s *Store) saveUserStats(stats *UserStats) error {
 		return fmt.Errorf("failed to save user stats: %w", err)
 	}
 
+	s.logger.Debug("Successfully saved user stats", "username", stats.Username, "ssh_key_fingerprint", stats.SSHKeyFingerprint)
 	return nil
 }
 

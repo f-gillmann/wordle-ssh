@@ -21,34 +21,24 @@ type MenuItem struct {
 }
 
 type MenuModel struct {
-	choices   []MenuItem
-	cursor    int
-	selected  int
-	state     MenuState
-	showStats bool
+	choices  []MenuItem
+	cursor   int
+	selected int
+	state    MenuState
 }
 
 func NewMenuModel() MenuModel {
-	return NewMenuModelWithStats(true)
-}
-
-func NewMenuModelWithStats(showStats bool) MenuModel {
 	choices := []MenuItem{
 		{Title: "Play Wordle", Description: "Start a new game"},
+		{Title: "View Stats", Description: "View your statistics"},
+		{Title: "Exit", Description: "Quit the application"},
 	}
-
-	if showStats {
-		choices = append(choices, MenuItem{Title: "View Stats", Description: "View your statistics"})
-	}
-
-	choices = append(choices, MenuItem{Title: "Exit", Description: "Quit the application"})
 
 	return MenuModel{
-		choices:   choices,
-		cursor:    0,
-		selected:  -1,
-		state:     MenuStateMain,
-		showStats: showStats,
+		choices:  choices,
+		cursor:   0,
+		selected: -1,
+		state:    MenuStateMain,
 	}
 }
 
@@ -78,14 +68,12 @@ func (m MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.selected = m.cursor
 
 			// Determine action based on menu choice
-			if m.cursor == 0 {
-				// Play Wordle
+			switch m.cursor {
+			case 0: // Play Wordle
 				m.state = MenuStateGame
-			} else if m.showStats && m.cursor == 1 {
-				// Stats (if the username is not blacklisted)
+			case 1: // View Stats
 				m.state = MenuStateStats
-			} else if (!m.showStats && m.cursor == 1) || (m.showStats && m.cursor == 2) {
-				// Exit
+			case 2: // Exit
 				m.state = MenuStateExit
 				return m, tea.Quit
 			}

@@ -111,4 +111,8 @@ var (
 			Padding(0, 1).
 			Bold(true).
 			Align(lipgloss.Center)
+
+	WarningStyle = lipgloss.NewStyle().
+			Foreground(colorYellow).
+			Bold(true)
 )

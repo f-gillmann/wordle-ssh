@@ -24,23 +24,23 @@ type AppModel struct {
 	targetWord        string
 	wordDate          string
 	username          string
+	sshKeyFingerprint string
 	statsStore        *stats.Store
 	hasPlayedToday    bool
-	isBlacklisted     bool
 	logger            *log.Logger
 }
 
-func NewAppModel(targetWord string, wordDate string, username string, statsStore *stats.Store, hasPlayedToday bool, isBlacklisted bool, logger *log.Logger) AppModel {
+func NewAppModel(targetWord string, wordDate string, username string, sshKeyFingerprint string, statsStore *stats.Store, hasPlayedToday bool, logger *log.Logger) AppModel {
 	return AppModel{
-		menu:           NewMenuModelWithStats(!isBlacklisted),
-		state:          AppStateMenu,
-		targetWord:     targetWord,
-		wordDate:       wordDate,
-		username:       username,
-		statsStore:     statsStore,
-		hasPlayedToday: hasPlayedToday,
-		isBlacklisted:  isBlacklisted,
-		logger:         logger,
+		menu:              NewMenuModel(),
+		state:             AppStateMenu,
+		targetWord:        targetWord,
+		wordDate:          wordDate,
+		username:          username,
+		sshKeyFingerprint: sshKeyFingerprint,
+		statsStore:        statsStore,
+		hasPlayedToday:    hasPlayedToday,
+		logger:            logger,
 	}
 }
 
@@ -59,10 +59,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.menu.GetState() == MenuStateGame {
 			if m.hasPlayedToday {
 				// User has already played today, load their result and show it
-				userStats, err := m.statsStore.GetUserStats(m.username)
+				userStats, err := m.statsStore.GetUserStats(m.username, m.sshKeyFingerprint)
 				if err != nil {
 					m.logger.Error("Failed to get user stats for already played", "error", err, "username", m.username)
-					userStats = &stats.UserStats{Username: m.username}
+					userStats = &stats.UserStats{Username: m.username, SSHKeyFingerprint: m.sshKeyFingerprint}
 				}
 
 				m.alreadyPlayedView = NewAlreadyPlayedModel(userStats.LastGameResult)
@@ -76,11 +76,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.game.Init()
 		} else if m.menu.GetState() == MenuStateStats {
 			// Load and show user stats
-			userStats, err := m.statsStore.GetUserStats(m.username)
+			userStats, err := m.statsStore.GetUserStats(m.username, m.sshKeyFingerprint)
 			if err != nil {
 				// Log error but continue with empty stats
 				m.logger.Error("Failed to get user stats", "error", err, "username", m.username)
-				userStats = &stats.UserStats{Username: m.username}
+				userStats = &stats.UserStats{Username: m.username, SSHKeyFingerprint: m.sshKeyFingerprint}
 			}
 
 			m.statsView = NewStatsModel(userStats)
@@ -98,37 +98,33 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		gameModel, cmd := m.game.Update(msg)
 		m.game = gameModel.(GameModel)
 
-		// Check if game ended and record stats (but not for blacklisted users)
+		// Check if game ended and record stats
 		if m.game.GetState() == GameStateWon {
-			if !m.isBlacklisted {
-				// Record win with number of guesses and game result
-				guesses := len(m.game.guesses)
-				gameResultJSON := m.game.GetGameResultJSON()
+			// Record win with number of guesses and game result
+			guesses := len(m.game.guesses)
+			gameResultJSON := m.game.GetGameResultJSON()
 
-				if err := m.statsStore.RecordWin(m.username, guesses, m.wordDate, gameResultJSON); err != nil {
-					m.logger.Error("Failed to record win", "error", err, "username", m.username)
-				} else {
-					// Mark that user has played today
-					m.hasPlayedToday = true
-				}
+			if err := m.statsStore.RecordWin(m.username, m.sshKeyFingerprint, guesses, m.wordDate, gameResultJSON); err != nil {
+				m.logger.Error("Failed to record win", "error", err, "username", m.username)
+			} else {
+				// Mark that user has played today
+				m.hasPlayedToday = true
 			}
 		} else if m.game.GetState() == GameStateLost {
-			if !m.isBlacklisted {
-				// Record loss with game result
-				gameResultJSON := m.game.GetGameResultJSON()
+			// Record loss with game result
+			gameResultJSON := m.game.GetGameResultJSON()
 
-				if err := m.statsStore.RecordLoss(m.username, m.wordDate, gameResultJSON); err != nil {
-					m.logger.Error("Failed to record loss", "error", err, "username", m.username)
-				} else {
-					// Mark that user has played today
-					m.hasPlayedToday = true
-				}
+			if err := m.statsStore.RecordLoss(m.username, m.sshKeyFingerprint, m.wordDate, gameResultJSON); err != nil {
+				m.logger.Error("Failed to record loss", "error", err, "username", m.username)
+			} else {
+				// Mark that user has played today
+				m.hasPlayedToday = true
 			}
 		}
 
 		// Check if we should return to menu or quit
 		if m.game.GetState() == GameStateMenu {
-			m.menu = NewMenuModelWithStats(!m.isBlacklisted)
+			m.menu = NewMenuModel()
 			m.state = AppStateMenu
 			return m, m.menu.Init()
 		} else if m.game.GetState() == GameStateQuit {
@@ -145,7 +141,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Check if any key was pressed to return to menu
 		if _, ok := msg.(tea.KeyMsg); ok {
 			// Any key returns to menu
-			m.menu = NewMenuModelWithStats(!m.isBlacklisted)
+			m.menu = NewMenuModel()
 			m.state = AppStateMenu
 			return m, m.menu.Init()
 		}
@@ -170,7 +166,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Check if any key was pressed to return to menu
 		if _, ok := msg.(tea.KeyMsg); ok {
 			// Any other key returns to menu
-			m.menu = NewMenuModelWithStats(!m.isBlacklisted)
+			m.menu = NewMenuModel()
 			m.state = AppStateMenu
 			return m, m.menu.Init()
 		}

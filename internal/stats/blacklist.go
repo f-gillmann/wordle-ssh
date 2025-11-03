@@ -20,7 +20,8 @@ var BlacklistedUsernames = map[string]bool{
 	"default":   true,
 	"1234":      true,
 	"ftp":       true,
-}
+	"nginx":     true,
+	"ubnt":      true}
 
 // IsBlacklisted checks if a username is blacklisted
 func IsBlacklisted(username string) bool {
