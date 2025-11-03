@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/f-gillmann/wordle-ssh/internal/stats"
 	"github.com/f-gillmann/wordle-ssh/internal/ui/styles"
 )
 
@@ -18,17 +19,19 @@ const (
 )
 
 type DeleteDataModel struct {
-	username string
-	input    string
-	state    DeleteDataState
-	err      error
+	username  string
+	userStats *stats.UserStats
+	input     string
+	state     DeleteDataState
+	err       error
 }
 
-func NewDeleteDataModel(username string) DeleteDataModel {
+func NewDeleteDataModel(username string, userStats *stats.UserStats) DeleteDataModel {
 	return DeleteDataModel{
-		username: username,
-		input:    "",
-		state:    DeleteDataStateConfirm,
+		username:  username,
+		userStats: userStats,
+		input:     "",
+		state:     DeleteDataStateConfirm,
 	}
 }
 
@@ -86,17 +89,53 @@ func (m DeleteDataModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m DeleteDataModel) View() string {
 	switch m.state {
 	case DeleteDataStateConfirm:
-		s := styles.MenuTitleWarnStyle.Render("Delete All Data")
+		// Display all the data that will be deleted
+		s := styles.MenuTitleWarnStyle.Render("Data to be deleted:")
 		s += "\n\n"
-		s += "This action will permanently delete all your game statistics.\n"
-		s += "This cannot be undone!\n\n"
-		s += fmt.Sprintf("To confirm, please type your username:\n%s\n", styles.MenuTitleStyle.Render(m.username))
 
-		// Show input with cursor
+		if m.userStats != nil && m.userStats.GamesPlayed > 0 {
+			s += fmt.Sprintf("  Username:             %s\n", m.userStats.Username)
+			s += fmt.Sprintf("  SSH Key Fingerprint:  %s\n", m.userStats.SSHKeyFingerprint)
+			s += fmt.Sprintf("  Games Played:         %d\n", m.userStats.GamesPlayed)
+			s += fmt.Sprintf("  Games Won:            %d\n", m.userStats.GamesWon)
+			s += fmt.Sprintf("  Games Lost:           %d\n", m.userStats.GamesLost)
+			s += fmt.Sprintf("  Win Rate:             %.1f%%\n", m.userStats.GetWinRate())
+			s += fmt.Sprintf("  Current Streak:       %d\n", m.userStats.CurrentStreak)
+			s += fmt.Sprintf("  Max Streak:           %d\n", m.userStats.MaxStreak)
+			s += fmt.Sprintf("  Average Guesses:      %.2f\n", m.userStats.GetAverageGuesses())
+			s += fmt.Sprintf("  Total Guesses:        %d\n", m.userStats.TotalGuesses)
+			s += "\n"
+
+			// Show guess distribution
+			s += "  Guess Distribution:\n"
+			for i := 0; i < 6; i++ {
+				s += fmt.Sprintf("    %d: %d\n", i+1, m.userStats.GuessDistribution[i])
+			}
+			s += "\n"
+
+			if !m.userStats.LastPlayed.IsZero() {
+				s += fmt.Sprintf("  Last Played:          %s\n", m.userStats.LastPlayed.Format("2006-01-02 15:04:05"))
+			}
+			if m.userStats.LastWordDate != "" {
+				s += fmt.Sprintf("  Last Word Date:       %s\n", m.userStats.LastWordDate)
+			}
+			if m.userStats.LastGameResult != "" {
+				s += fmt.Sprintf("  Last Game Result:     %s\n", m.userStats.LastGameResult)
+			}
+		} else {
+			s += "  No data found for this user.\n"
+		}
+
+		s += "\n"
+		s += styles.ErrorStyle.Render("This action cannot be undone!")
+		s += "\n\n"
+
+		// Delete confirmation prompt
+		s += fmt.Sprintf("To confirm deletion, type your username:\n")
 		s += fmt.Sprintf("> %s█\n\n", m.input)
 
 		if m.err != nil {
-			s += styles.ErrorStyle.Render(fmt.Sprintf("%s", m.err.Error()))
+			s += styles.ErrorStyle.Render(fmt.Sprintf("✗ %s", m.err.Error()))
 			s += "\n\n"
 		}
 

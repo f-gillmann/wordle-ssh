@@ -17,18 +17,18 @@ type AlreadyPlayedModel struct {
 }
 
 func NewAlreadyPlayedModel(gameResultJSON string) AlreadyPlayedModel {
-	var result struct {
-		Won     bool       `json:"won"`
-		Guesses [][]string `json:"guesses"`
-	}
-
 	won := false
 	guesses := 0
 
 	if gameResultJSON != "" {
+		var result struct {
+			W bool     `json:"w"`
+			G []string `json:"g"`
+		}
+
 		if err := json.Unmarshal([]byte(gameResultJSON), &result); err == nil {
-			won = result.Won
-			guesses = len(result.Guesses)
+			won = result.W
+			guesses = len(result.G)
 		}
 	}
 
@@ -71,14 +71,18 @@ func (m AlreadyPlayedModel) View() string {
 	// Parse and display the game result
 	if m.gameResult != "" {
 		var result struct {
-			Won     bool       `json:"won"`
-			Guesses [][]string `json:"guesses"` // Each guess is array of [letter, state]
+			W bool     `json:"w"`
+			G []string `json:"g"`
 		}
 
-		if err := json.Unmarshal([]byte(m.gameResult), &result); err == nil {
-			// Render the squares
-			for _, guess := range result.Guesses {
+		if err := json.Unmarshal([]byte(m.gameResult), &result); err == nil && len(result.G) > 0 {
+			won := result.W
+			guesses := result.G
+
+			// Render the squares from compact format
+			for _, guess := range guesses {
 				var tiles []string
+				// Parse compact format: "L1S1L2S2L3S3L4S4L5S5"
 				for i := 0; i < len(guess); i += 2 {
 					if i+1 >= len(guess) {
 						break
@@ -88,11 +92,11 @@ func (m AlreadyPlayedModel) View() string {
 
 					var style lipgloss.Style
 					switch state {
-					case "correct":
+					case 'c':
 						style = styles.TileStyleCorrect
-					case "present":
+					case 'p':
 						style = styles.TileStylePresent
-					case "absent":
+					case 'a':
 						style = styles.TileStyleAbsent
 					default:
 						style = styles.TileStyleEmpty
@@ -108,7 +112,7 @@ func (m AlreadyPlayedModel) View() string {
 			}
 
 			// Render empty rows for remaining guesses
-			remainingGuesses := MaxGuesses - len(result.Guesses)
+			remainingGuesses := MaxGuesses - len(guesses)
 			for i := 0; i < remainingGuesses; i++ {
 				var emptyTiles []string
 				for j := 0; j < WordLength; j++ {
@@ -120,8 +124,8 @@ func (m AlreadyPlayedModel) View() string {
 
 			s.WriteString("\n")
 
-			if result.Won {
-				s.WriteString(styles.SuccessStyle.Render(fmt.Sprintf("You won in %d guesses!", len(result.Guesses))))
+			if won {
+				s.WriteString(styles.SuccessStyle.Render(fmt.Sprintf("You won in %d guesses!", len(guesses))))
 			} else {
 				s.WriteString(styles.ErrorStyle.Render("You didn't get it this time."))
 			}

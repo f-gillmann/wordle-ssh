@@ -349,33 +349,31 @@ func (m GameModel) GetState() GameState {
 // GetGameResultJSON returns the game result as a JSON string for storage
 func (m GameModel) GetGameResultJSON() string {
 	type GameResultData struct {
-		Won     bool       `json:"won"`
-		Guesses [][]string `json:"guesses"` // Each guess is array of [letter, state]
+		W bool     `json:"w"`           // Won
+		G []string `json:"g,omitempty"` // Guesses as compact strings: "LetterState" (c=correct, p=present, a=absent)
 	}
 
 	result := GameResultData{
-		Won:     m.state == GameStateWon,
-		Guesses: [][]string{},
+		W: m.state == GameStateWon,
+		G: []string{},
 	}
 
-	// Convert guess results to simplified format
+	// Convert guess results to compact format: each guess is "L1S1L2S2L3S3L4S4L5S5"
 	for _, guessResult := range m.guessResults {
-		var guess []string
+		var guess strings.Builder
 		for _, gr := range guessResult {
-			var state string
+			guess.WriteString(gr.Letter)
 			switch gr.State {
 			case LetterStateCorrect:
-				state = "correct"
+				guess.WriteString("c")
 			case LetterStatePresent:
-				state = "present"
+				guess.WriteString("p")
 			case LetterStateAbsent:
-				state = "absent"
+				guess.WriteString("a")
 			}
-
-			guess = append(guess, gr.Letter, state)
 		}
 
-		result.Guesses = append(result.Guesses, guess)
+		result.G = append(result.G, guess.String())
 	}
 
 	jsonBytes, err := json.Marshal(result)

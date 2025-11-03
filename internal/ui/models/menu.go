@@ -28,9 +28,10 @@ type MenuModel struct {
 	selected    int
 	state       MenuState
 	hasUserData bool
+	motd        string
 }
 
-func NewMenuModel(hasUserData bool) MenuModel {
+func NewMenuModel(hasUserData bool, motd string) MenuModel {
 	choices := []MenuItem{
 		{Title: "Play Wordle", Description: "Start a new game"},
 		{Title: "View Stats", Description: "View your statistics"},
@@ -49,6 +50,7 @@ func NewMenuModel(hasUserData bool) MenuModel {
 		selected:    -1,
 		state:       MenuStateMain,
 		hasUserData: hasUserData,
+		motd:        motd,
 	}
 }
 
@@ -99,7 +101,7 @@ func (m MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m MenuModel) View() string {
-	s := styles.MenuTitleStyle.Render("github.com/f-gillmann/wordle-ssh")
+	s := styles.MenuTitleStyle.Render(m.motd)
 	s += "\n\n"
 
 	for i, choice := range m.choices {

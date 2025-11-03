@@ -1,6 +1,7 @@
+version: '3.8'
+
 services:
   wordle-ssh:
-    tty: true
     build:
       context: .
       dockerfile: Dockerfile
@@ -10,14 +11,12 @@ services:
     environment:
       - WORDLE_SSH_HOST=0.0.0.0
       - WORDLE_SSH_PORT=23234
-      - WORDLE_SSH_HOST_KEY_PATH=.ssh/id_ed25519
-      - WORDLE_SSH_DB_PATH=/data/wordle-stats.db
+      - WORDLE_SSH_HOST_KEY_PATH=/app/.ssh/id_ed25519
+      - WORDLE_SSH_DB_PATH=/app/data/wordle-stats.db
+      - WORDLE_SSH_MOTD=Welcome to Wordle SSH!
       - WORDLE_SSH_LOG_LEVEL=info
     volumes:
-      - ssh-keys:/root/.ssh
-      - wordle-data:/data
+      - ./data:/app/data
+      - ./.ssh:/app/.ssh
     restart: unless-stopped
 
-volumes:
-  ssh-keys:
-  wordle-data:

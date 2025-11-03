@@ -31,10 +31,11 @@ type AppModel struct {
 	statsStore        *stats.Store
 	hasPlayedToday    bool
 	hasUserData       bool
+	motd              string
 	logger            *log.Logger
 }
 
-func NewAppModel(targetWord string, wordDate string, username string, sshKeyFingerprint string, statsStore *stats.Store, hasPlayedToday bool, logger *log.Logger) AppModel {
+func NewAppModel(targetWord string, wordDate string, username string, sshKeyFingerprint string, statsStore *stats.Store, hasPlayedToday bool, motd string, logger *log.Logger) AppModel {
 	// Check if user has any data
 	hasUserData := false
 	if userStats, err := statsStore.GetUserStats(username, sshKeyFingerprint); err == nil && userStats.GamesPlayed > 0 {
@@ -42,7 +43,7 @@ func NewAppModel(targetWord string, wordDate string, username string, sshKeyFing
 	}
 
 	return AppModel{
-		menu:              models.NewMenuModel(hasUserData),
+		menu:              models.NewMenuModel(hasUserData, motd),
 		state:             AppStateMenu,
 		targetWord:        targetWord,
 		wordDate:          wordDate,
@@ -51,6 +52,7 @@ func NewAppModel(targetWord string, wordDate string, username string, sshKeyFing
 		statsStore:        statsStore,
 		hasPlayedToday:    hasPlayedToday,
 		hasUserData:       hasUserData,
+		motd:              motd,
 		logger:            logger,
 	}
 }
@@ -99,8 +101,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			return m, m.statsView.Init()
 		} else if m.menu.GetState() == models.MenuStateDeleteData {
-			// Show delete data confirmation
-			m.deleteDataView = models.NewDeleteDataModel(m.username)
+			// Load user stats and show delete data confirmation
+			userStats, err := m.statsStore.GetUserStats(m.username, m.sshKeyFingerprint)
+			if err != nil {
+				m.logger.Error("Failed to get user stats for delete data", "error", err, "username", m.username)
+				userStats = &stats.UserStats{Username: m.username, SSHKeyFingerprint: m.sshKeyFingerprint}
+			}
+
+			m.deleteDataView = models.NewDeleteDataModel(m.username, userStats)
 			m.state = AppStateDeleteData
 
 			return m, m.deleteDataView.Init()
@@ -143,7 +151,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Check if we should return to menu or quit
 		if m.game.GetState() == models.GameStateMenu {
-			m.menu = models.NewMenuModel(m.hasUserData)
+			m.menu = models.NewMenuModel(m.hasUserData, m.motd)
 			m.state = AppStateMenu
 			return m, m.menu.Init()
 		} else if m.game.GetState() == models.GameStateQuit {
@@ -160,7 +168,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Check if any key was pressed to return to menu
 		if _, ok := msg.(tea.KeyMsg); ok {
 			// Any key returns to menu
-			m.menu = models.NewMenuModel(m.hasUserData)
+			m.menu = models.NewMenuModel(m.hasUserData, m.motd)
 			m.state = AppStateMenu
 			return m, m.menu.Init()
 		}
@@ -185,7 +193,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Check if any key was pressed to return to menu
 		if _, ok := msg.(tea.KeyMsg); ok {
 			// Any other key returns to menu
-			m.menu = models.NewMenuModel(m.hasUserData)
+			m.menu = models.NewMenuModel(m.hasUserData, m.motd)
 			m.state = AppStateMenu
 			return m, m.menu.Init()
 		}
@@ -212,7 +220,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Check if we should return to menu
 		if m.deleteDataView.GetState() == models.DeleteDataStateMenu {
-			m.menu = models.NewMenuModel(m.hasUserData)
+			m.menu = models.NewMenuModel(m.hasUserData, m.motd)
 			m.state = AppStateMenu
 			return m, m.menu.Init()
 		}

@@ -50,6 +50,7 @@ jobs:
               -p 22:23234 \
               -e WORDLE_SSH_HOST_KEY_PATH=/root/.ssh/id_ed25519 \
               -e WORDLE_SSH_DB_PATH=/data/wordle-stats.db \
+              -e WORDLE_SSH_MOTD="wordle.flg.sh" \
               -v ssh-keys:/root/.ssh \
               -v wordle-data:/data \
               --restart unless-stopped \

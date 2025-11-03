@@ -27,6 +27,7 @@ const (
 	defaultPort        = "23234"
 	defaultHostKeyPath = ".ssh/id_ed25519"
 	defaultDBPath      = "./wordle-stats.db"
+	defaultMOTD        = "Welcome to Wordle SSH!"
 )
 
 // Config holds the server configuration
@@ -35,6 +36,7 @@ type Config struct {
 	Port        string
 	HostKeyPath string
 	DBPath      string
+	MOTD        string
 	Logger      *log.Logger
 	LogLevel    log.Level
 }
@@ -61,6 +63,11 @@ func LoadConfigFromEnv() Config {
 		dbPath = defaultDBPath
 	}
 
+	motd := os.Getenv("WORDLE_SSH_MOTD")
+	if motd == "" {
+		motd = defaultMOTD
+	}
+
 	logLevel := os.Getenv("WORDLE_SSH_LOG_LEVEL")
 	var level log.Level
 
@@ -82,6 +89,7 @@ func LoadConfigFromEnv() Config {
 		Port:        port,
 		HostKeyPath: hostKeyPath,
 		DBPath:      dbPath,
+		MOTD:        motd,
 		LogLevel:    level,
 	}
 }
@@ -214,7 +222,7 @@ func (s *Server) teaHandler(sshSession ssh.Session) (tea.Model, []tea.ProgramOpt
 	}
 
 	// Create the app model with the current word, stats store, and logger
-	m := ui.NewAppModel(s.wordleWord, s.wordleDate, username, sshKeyFingerprint, s.statsStore, hasPlayed, s.config.Logger)
+	m := ui.NewAppModel(s.wordleWord, s.wordleDate, username, sshKeyFingerprint, s.statsStore, hasPlayed, s.config.MOTD, s.config.Logger)
 
 	opts := []tea.ProgramOption{tea.WithAltScreen()}
 	opts = append(opts, bubbletea.MakeOptions(sshSession)...)
