@@ -23,7 +23,6 @@ import (
 )
 
 const (
-	defaultHost        = ""
 	defaultPort        = "23234"
 	defaultHostKeyPath = ".ssh/id_ed25519"
 	defaultDBPath      = "./wordle-stats.db"
@@ -102,10 +101,6 @@ type Server struct {
 
 // New creates a new SSH server
 func New(config Config) (*Server, error) {
-	if config.Host == "" {
-		config.Host = defaultHost
-	}
-
 	if config.Port == "" {
 		config.Port = defaultPort
 	}
