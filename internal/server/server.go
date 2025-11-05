@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	defaultHost        = "0.0.0.0"
+	defaultHost        = ""
 	defaultPort        = "23234"
 	defaultHostKeyPath = ".ssh/id_ed25519"
 	defaultDBPath      = "./wordle-stats.db"
@@ -44,9 +44,6 @@ type Config struct {
 // LoadConfigFromEnv loads configuration from environment variables
 func LoadConfigFromEnv() Config {
 	host := os.Getenv("WORDLE_SSH_HOST")
-	if host == "" {
-		host = defaultHost
-	}
 
 	port := os.Getenv("WORDLE_SSH_PORT")
 	if port == "" {
